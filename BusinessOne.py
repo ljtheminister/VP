@@ -83,48 +83,12 @@ for channel_year, group in grouped_data:
         compute_lives_copay(Non_PA, all_lives_tier, rx_lives_tier, avg_copay, channel_year, 'Non_PA')
 
 
-
+'''
 sub = data.query("Channel=='Commercial' and Form_Status=='Tier 2' and Restrict_PA=='Y'")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 group = grouped_data.get_group((2010, 'Commercial'))
 tiers = group.groupby(['Form_Status'])
 tier_data = tiers.get_group('Tier 2')
-
-
-
-
-
 for i, row in Non_PA[['Restrict_PA', 'Restrict_SE', 'Restrict_QL', 'Restrict_AR']].iterrows():
     print row
-
-
-
 #PA_plus[['Restrict_PA', 'Restrict_SE', 'Restrict_QL', 'Restrict_AR']]
-
-
-
-
-
-
-
-
-
+'''
