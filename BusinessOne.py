@@ -1,9 +1,11 @@
 import pandas as pd
 import numpy as np
 from collections import defaultdict
+from decimal import Decimal
 
 data = pd.read_csv('Raw Data File for Business One.csv')
 
+data['copay'] = data['Avg_Wt_Copay'].apply(lambda x: 0 if x=='-' else Decimal(x.strip('$')))
 
 # Life count by channel
 all_years = {}
@@ -47,10 +49,26 @@ def compute_lives(data, all_dict, rx_dict, key1, key2):
     rx_dict[key1][key2] = rx_lives
  
 
+def compute_lives_copay(data, all_dict, rx_dict, copay_dict, key1, key2):
+    all_lives = 0
+    rx_lives = 0
+    copay = 0
+    entities = data.groupby('Entity_Name')
+    for entity, entity_grp in entities:
+        all_lives += entity_grp['Total_Lives'].mean()
+        rx_lives += entity_grp['Total_Lives_Rx'].mean()
+        rx_lives_sum = entity_grp['Total_Lives_Rx'].sum()
+        if rx_lives_sum == 0:
+            pass
+        else:
+            copay += (entity_grp.copay * entity_grp.Total_Lives_Rx).mean()/rx_lives_sum
+    all_dict[key1][key2] = all_lives
+    rx_dict[key1][key2] = rx_lives
+    copay_dict[key1][key2] = copay
 
 all_lives_tier = defaultdict(dict)
 rx_lives_tier = defaultdict(dict)
-
+avg_copay = defaultdict(dict)
 
 for channel_year, group in grouped_data:
     print channel_year
@@ -58,11 +76,31 @@ for channel_year, group in grouped_data:
     for tier, tier_data in tiers:
         print tier
         PA_only = tier_data.query("Restrict_PA=='Y'")
-        compute_lives(PA_only, all_lives_tier, rx_lives_tier, channel_year, 'PA_only')
+        compute_lives_copay(PA_only, all_lives_tier, rx_lives_tier, avg_copay, channel_year, 'PA_only')
         PA_plus = tier_data.query("Restrict_PA=='Y' and (Restrict_SE=='Y' or Restrict_QL=='Y' or Restrict_AR=='Y')")
-        compute_lives(PA_plus, all_lives_tier, rx_lives_tier, channel_year, 'PA_plus')
+        compute_lives_copay(PA_plus, all_lives_tier, rx_lives_tier, avg_copay, channel_year, 'PA_plus')
         Non_PA = tier_data.query("Restrict_PA=='-' and (Restrict_SE=='Y' or Restrict_QL=='Y' or Restrict_AR=='Y')")
-        compute_lives(Non_PA, all_lives_tier, rx_lives_tier, channel_year, 'Non_PA')
+        compute_lives_copay(Non_PA, all_lives_tier, rx_lives_tier, avg_copay, channel_year, 'Non_PA')
+
+
+
+sub = data.query("Channel=='Commercial' and Form_Status=='Tier 2' and Restrict_PA=='Y'")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
