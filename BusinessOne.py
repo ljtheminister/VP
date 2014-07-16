@@ -9,6 +9,7 @@ import cPickle as pickle
 data = pd.read_csv('Raw Data File for Business One.csv')
 
 data['copay'] = data['Avg_Wt_Copay'].apply(lambda x: 0 if x=='-' else Decimal(x.strip('$')))
+data['copay_Rx_lives'] = data.ix[:, ['Total_Lives_Rx', 'Avg_Wt_Copay']].apply(lambda x: 0 if x['Avg_Wt_Copay']=='-' else x['Total_Lives_Rx'], axis=1)
 
 # Life count by channel
 all_years = {}
@@ -21,7 +22,6 @@ for channel, channel_grp in channel_data:
         all_lives += entity_grp['Total_Lives'].mean()
         rx_lives += entity_grp['Total_Lives_Rx'].mean()
     all_years[channel] = (all_lives, rx_lives)
-
 
 # Life count by channel/year
 yearly = {}
@@ -42,7 +42,6 @@ for year, channel in yearly.keys():
 
 channels = ['Commercial', 'DoD', 'Managed Medicaid', 'Medicare', 'PBM Commercial', 'PBM Medicare', 'State Medicaid', 'VA']
 
-
 with open('BusinessOne_Overall.csv', 'wb') as f:
     csvwriter = csv.writer(f, delimiter=',')
     csvwriter.writerow(['All Years'])
@@ -62,10 +61,6 @@ with open('BusinessOne_Overall.csv', 'wb') as f:
                 all_lives, rx_lives = 0, 0
             csvwriter.writerow([channel, int(all_lives), int(rx_lives)]) 
 
-'''
-Do I have to clean-up the tier data?
-'''
-
 
 def compute_lives(data, all_dict, rx_dict, key1, key2):
     all_lives = 0
@@ -81,25 +76,34 @@ def compute_lives(data, all_dict, rx_dict, key1, key2):
 def compute_lives_copay(data, tiered_data, year, channel, tier, restriction):
     all_lives = 0
     rx_lives = 0
-    copay = 0
+    rx_lives_sum = 0
+    copay = 0 # average weighted copay
+    copay_sum = 0
     entities = data.groupby('Entity_Name')
     for entity, entity_grp in entities:
         all_lives += entity_grp['Total_Lives'].mean()
         rx_lives += entity_grp['Total_Lives_Rx'].mean()
-        rx_lives_sum = entity_grp['Total_Lives_Rx'].sum()
-        if rx_lives_sum == 0:
-            pass
-        else:
-            copay += (entity_grp.copay * entity_grp.Total_Lives_Rx).mean()/rx_lives_sum
+        rx_lives_sum += entity_grp['Total_Lives_Rx'].sum()
+        copay_sum += (entity_grp.copay * entity_grp.copay_Rx_lives).sum()
+
+    if rx_lives_sum == 0:
+        pass
+    else:
+        copay = copay_sum/rx_lives_sum
 
     restrict_dict = tiered_data[year][channel][tier][restriction] 
     restrict_dict['All Lives'] = all_lives
     restrict_dict['Rx Lives'] = rx_lives
     restrict_dict['Copay'] = copay
+    restrict_dict['Copay sum'] = copay_sum
+    restrict_dict['Copay Rx Lives'] = rx_lives_sum
     all_plans = tiered_data[year]['All Plans'][tier][restriction]
     all_plans['All Lives'] += all_lives
     all_plans['Rx Lives'] += rx_lives
-    all_plans['Copay'] += copay
+    all_plans['Copay sum'] += copay_sum
+    all_plans['Copay Rx Lives'] += rx_lives_sum
+    if all_plans['Copay Rx Lives']:
+        all_plans['Copay'] = all_plans['Copay sum']/all_plans['Copay Rx Lives']
 
 
 '''
@@ -115,7 +119,7 @@ years = sorted(data['Period_Year'].unique())
 channels = sorted(data['Channel'].unique())
 tiers = sorted(data['Form_Status'].unique())
 restrictions = ['PA only', 'PA plus', 'Non-PA', 'No Restrictions']
-items = ['All Lives', 'Rx Lives', 'Copay']
+items = ['All Lives', 'Rx Lives', 'Copay', 'Copay sum', 'Copay Rx Lives']
 
 def instantiate_tiered_data():
     tiered_data = {}
@@ -137,7 +141,7 @@ def instantiate_tiered_data():
     channels.pop()
     return tiered_data 
 
-def compute_tier_counts():
+def compute_tier_counts(data):
     tiered_data = instantiate_tiered_data()
     years_group = data.groupby(['Period_Year'])
 
@@ -165,8 +169,7 @@ def compute_tier_counts():
     return tiered_data
 
 
-tiered_data = compute_tier_counts()
-
+tiered_data = compute_tier_counts(data)
 pickle.dump(tiered_data, open('tiered_BusinessOne.p', 'wb'))
 
 # Write out tiered results to csv
@@ -189,7 +192,6 @@ def aggregate_channel_data(data, year, channel, item):
             channel_data.append(d[tier][restriction][item])
     return channel_data
     
-
 def write_tiered_data(filename, tiered_data, item):
     with open('%s.csv'%(filename), 'wb') as f:
         csvwriter = csv.writer(f, delimiter=',')
@@ -205,6 +207,7 @@ def write_tiered_data(filename, tiered_data, item):
             csvwriter.writerow([])
 
 
+items = ['All Lives', 'Rx Lives', 'Copay']
 write_tiered_data('BusinessOne_All_Lives', tiered_data, 'All Lives')
 write_tiered_data('BusinessOne_Rx_Lives', tiered_data, 'Rx Lives')
 write_tiered_data('BusinessOne_Copay', tiered_data, 'Copay')
