@@ -6,6 +6,7 @@ import csv
 import string
 import Queue
 import cPickle as pickle
+from collections import defaultdict
 
 states = {
         'AK': 'Alaska',
@@ -182,7 +183,7 @@ data.to_csv('Fingertip_agg.csv', index=False)
 # Expanding the restrictions variable
 
 
-def classify_tier(d, drug_data):
+def classify_tier(d, drug_data, i):
     if type(d)==str:
         if '(PA)' in d: 
             drug_data.ix[i, 'PA'] = 'Yes'
@@ -221,7 +222,7 @@ def filter_drug(data, drug_name):
     for i, row in drug.iterrows():
         print i
         d = row[drug_name]
-        classify_tier(d, drug)
+        classify_tier(d, drug, i)
         
     return drug
 
@@ -232,85 +233,216 @@ tarceva.to_csv('Fingertip_Tarceva.csv', index=False)
 
 
 def process_to_individual_drug(data):
-# Dictionary of drug datasets
-drug_map = {}
-drug_map['Gleevec'] = data['Gleevec']
-drug_map['Nexavar'] = data['Nexavar']
-drug_map['Revlimid'] = data['Revlimid']
-drug_map['Tykerb'] = data['Tykerb']
-drug_map['Zytiga'] = data['Zytiga']
-drug_map['Tarceva'] = data['Tarceva']
+    # Dictionary of drug datasets
+    drug_map = {}
+    drug_map['Gleevec'] = pd.DataFrame(data['Gleevec'])
+    drug_map['Nexavar'] = pd.DataFrame(data['Nexavar'])
+    drug_map['Revlimid'] = pd.DataFrame(data['Revlimid'])
+    drug_map['Tykerb'] = pd.DataFrame(data['Tykerb'])
+    drug_map['Zytiga'] = pd.DataFrame(data['Zytiga'])
+    drug_map['Tarceva'] = pd.DataFrame(data['Tarceva'])
+    print 'Starting instantiation'
 
-drug_names = drug_map.keys()
+    drug_names = drug_map.keys()
+    # Instatiate new restriction and tier columns within each drug dataset
+    for drug_data in drug_map.values(): 
+        drug_data['PA'] = 'No'
+        drug_data['QL'] = 'No'
+        drug_data['ST'] = 'No'
+        drug_data['OR'] = 'No'
+        drug_data['Tier'] = 'N/A'
 
-# Instatiate new restriction and tier columns within each drug dataset
-for drug_data in drug_map.values(): 
-    drug_data['PA'] = 'No'
-    drug_data['QL'] = 'No'
-    drug_data['ST'] = 'No'
-    drug_data['OR'] = 'No'
-    drug_data['Tier'] = 'N/A'
+    print len(data)
+    for i, row in data.iterrows():
+        print i
+        for drug_name in drug_names:
+            classify_tier(row[drug_name], drug_map[drug_name], i)
 
-print len(data)
-for i, row in data.iterrows():
-    print i
-    for drug_name in drug_names:
-        classify_tier(row[drug_name], drug_map[drug_name])
+    rest_of_data = data.ix[:,['Health Plan', 'Preferred Brand Tier', 'Provider', 'Plan Type', 'State(s) of Operation', 'Month', 'Year']]
 
-rest_of_data = data.ix[['Health Plan', 'Provider', 'Plan Type', 'State(s) of Operation']]
+    for drug_name, drug_data in drug_map.iteritems():
+        drug_map[drug_name] = pd.concat([drug_data, rest_of_data], axis=1)
+         
+    return drug_map
 
-for drug_data in drug_data.values():
-    drug_data = pd.concat([drug_data, rest_of_data], axis=1)
-
-return drug_map
-
-
+'''
 drug_map = process_to_individual_drug(data)
-pickle.dump(drug_map, open('drug_map.p', 'rb'))
+pickle.dump(drug_map, open('drug_map.p', 'wb'))
+
+drug_name = 'Tarceva'
+data = pd.read_csv(drug_name + '.csv')
+'''
+
+
+
+
+def instantiate_tiered_data():
+    tiered_data = {}
+    plans.append('All Plans')
+
+    for year in years:
+        tiered_data[year] = {}
+        t_year = tiered_data[year]
+        for plan in plans:
+            t_year[plan] = {}
+            t_plan = t_year[plan]
+            for tier in tiers:
+                t_plan[tier] = {}
+                t_tier = t_plan[tier]
+                for restriction in restrictions:
+                    t_tier[restriction] = {}
+                    t_restriction = t_tier[restriction]
+                    for item in items:
+                        t_restriction[item] = 0
+    plans.pop()
+    return tiered_data
+
+
+def count_number_plans(data, tiered_data, year, plan, tier, restriction):
+    num_plans = 0
+    num_plans_sum = 0
+    months = data.groupby('Month')
+    num_months = 0 
+    for month, month_grp in months:
+        num_months += 1 
+        num_plans_sum += len(month_grp)
+    if num_months:
+        num_plans = num_plans_sum/float(num_months)
+    tiered_data[year][plan][tier][restriction]['Number of Plans'] = num_plans
+    tiered_data[year]['All Plans'][tier][restriction]['Number of Plans'] += num_plans
+
+def compute_tier_counts(data):
+    tiered_data = instantiate_tiered_data()
+
+    years_group = data.groupby(['Year'])
+    
+    for year, year_data in years_group: 
+        print year
+        plans_group = year_data.groupby(['Plan Type'])
+
+        for plan, plan_data in plans_group:
+            print plan
+            tiers_group = plan_data.groupby(['Tier'])
+
+            for tier, tier_data in tiers_group:
+                print tier
+                PA_only = tier_data.query("PA=='Yes' and QL=='No' and ST=='No' and OR=='No'")
+                count_number_plans(PA_only, tiered_data, year, plan, tier, 'PA')
+
+                PA_plus = tier_data.query("PA=='Yes' and (QL=='Yes' or ST=='Yes' or OR=='Yes')")
+                count_number_plans(PA_plus, tiered_data, year, plan, tier, 'PA plus')
+
+                Non_PA = tier_data.query("PA=='No' and (QL=='Yes' or ST=='Yes' or OR=='Yes')")
+                count_number_plans(Non_PA, tiered_data, year, plan, tier, 'Non-PA')
+
+                No_restrictions = tier_data.query("PA=='No' and (QL=='No' or ST=='No' or OR=='No')")
+                count_number_plans(No_restrictions, tiered_data, year, plan, tier, 'No Restrictions')
+    return tiered_data
+
+
+def define_tier_labels(tiers_of_interest):
+    tier_labels = ['']
+    for x in tiers_of_interest:
+        tier_labels.append('Tier ' + x)
+        for i in xrange(3):
+            tier_labels.append('')
+    return tier_labels
+
+
+def define_restriction_labels(tiers_of_interest, restrictions):
+    restriction_labels = ['']
+    for i in xrange(len(tiers_of_interest)):
+        for restriction in restrictions:
+            restriction_labels.append(restriction)
+    return restriction_labels
+
+def aggregate_plan_data(data, year, plan, item, tiers_of_interest):
+    plan_data = [plan] 
+    d = data[year][plan]
+    for tier in tiers_of_interest:
+        print tier
+        for restriction in restrictions:
+            print restriction
+            plan_data.append(d[tier][restriction][item])
+    return plan_data
+
+
+def write_tiered_data(filename, tiered_data, item):
+    years = sorted(data['Year'].unique())
+    plans = sorted(data['Plan Type'].unique())
+    '''
+    tiers_of_interest = [str(x+1) for x in xrange(7)]
+    tiers_of_interest.append('NC')
+    '''
+    tiers = sorted(tarceva['Tier'].unique())
+    tiers_of_interest = tiers
+    restrictions = ['PA only', 'PA plus', 'Non-PA', 'No Restrictions']
+    items = ['Number of Plans']
+    tier_labels = define_tier_labels(tiers_of_interest)
+    restriction_labels = define_restriction_labels(tiers_of_interest, restrictions)        
+
+    with open('%s.csv'%(filename), 'wb') as f:
+        csvwriter = csv.writer(f, delimiter=',')
+        for year in years:
+            print year
+            csvwriter.writerow([str(year)])
+            csvwriter.writerow(tier_labels)
+            csvwriter.writerow(restriction_labels)
+            for plan in plans:
+                print plan
+                plan_data = aggregate_plan_data(tiered_data, year, plan, item, tiers_of_interest)
+                csvwriter.writerow(plan_data)
+            all_plans_sum = aggregate_plan_data(tiered_data, year, 'All Plans', item, tiers_of_interest)
+            csvwriter.writerow(all_plans_sum)
+            csvwriter.writerow([])
+
+
+def write_drug_data(drug_map, drug_name=None):
+    if drug_name==None:
+        for drug_name, drug_data in drug_map.iteritems():
+            data = drug_map[drug_name]
+            counts = compute_tier_counts(data)
+            filename = 'Fingertip_' + drug_name
+            write_tiered_data(filename, counts, items[0])
+    else:
+        data = drug_map[drug_name]
+        counts = compute_tier_counts(data)
+        filename = 'Fingertip_' + drug_name
+        write_tiered_data(filename, counts, items[0])
+    return counts
+
+
+tier_labels = define_tier_labels()
+restriction_labels = define_restriction_labels()        
+write_drug_data(drug_map, 'Tarceva')
+
+
+write_tiered_data('Fingertip_Tarceva', counts_tarceva, 'Number of Plans')
 
 
 
 
 
+tier_counts = defaultdict(int)
+index = pd.Series()
+entities_group = tarceva.groupby(['Health Plan', 'Year', 'Plan Type'])
 
+for entity, entity_data in entities_group:
+    print entity
+    tier_count = len(entity_data['Tier'].unique())
+    tier_counts[tier_count] += 1
+    if tier_count > 1:
+        index = index.append(pd.Series(entity_data.index))
 
+index = pd.Series(index)
+tiers_data = tarceva.ix[index]
 
+multiple_tiers = tiers_data.groupby(['Health Plan', 'Year', 'Plan Type'])
+tier_combos = defaultdict(int)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+for entity, entity_data in multiple_tiers:
+    tier_combo = sorted(entity_data['Tier'].unique())
+    tier_combos[str(tier_combo)] += 1
 
 
 

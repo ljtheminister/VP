@@ -62,15 +62,18 @@ with open('BusinessOne_Overall.csv', 'wb') as f:
             csvwriter.writerow([channel, int(all_lives), int(rx_lives)]) 
 
 
-def compute_lives(data, all_dict, rx_dict, key1, key2):
+def compute_lives(data, tiered_data, year, channel, tier, restriction):
     all_lives = 0
     rx_lives = 0
+    
     entities = data.groupby('Entity_Name')
     for entity, entity_grp in entities:
-        all_lives += entity_grp['Total_Lives'].mean()
-        rx_lives += entity_grp['Total_Lives_Rx'].mean()
-    all_dict[key1][key2] = all_lives
-    rx_dict[key1][key2] = rx_lives
+    
+
+
+
+
+
  
 
 def compute_lives_copay(data, tiered_data, year, channel, tier, restriction):
@@ -81,8 +84,10 @@ def compute_lives_copay(data, tiered_data, year, channel, tier, restriction):
     copay_sum = 0
     entities = data.groupby('Entity_Name')
     for entity, entity_grp in entities:
-        all_lives += entity_grp['Total_Lives'].mean()
-        rx_lives += entity_grp['Total_Lives_Rx'].mean()
+        #all_lives += entity_grp['Total_Lives'].mean()
+        #rx_lives += entity_grp['Total_Lives_Rx'].mean()
+        all_lives += entity_grp['Total_Lives'].sum()/12.
+        rx_lives += entity_grp['Total_Lives_Rx'].sum()/12.
         rx_lives_sum += entity_grp['Total_Lives_Rx'].sum()
         copay_sum += (entity_grp.copay * entity_grp.copay_Rx_lives).sum()
 
@@ -155,7 +160,7 @@ def compute_tier_counts(data):
 
             for tier, tier_data in tiers_group:
                 print tier
-                PA_only = tier_data.query("Restrict_PA=='Y'")
+                PA_only = tier_data.query("Restrict_PA=='Y' and Restrict_SE=='-' and Restrict_QL=='-' and Restrict_AR=='-'")
                 compute_lives_copay(PA_only, tiered_data, year, channel, tier, 'PA only')
 
                 PA_plus = tier_data.query("Restrict_PA=='Y' and (Restrict_SE=='Y' or Restrict_QL=='Y' or Restrict_AR=='Y')")
@@ -184,6 +189,19 @@ restrictions_labels = ['', 'PA Only', 'PA +', 'R (Non-PA)', 'No Restrictions', '
 
 tiers_of_interest = ['Tier 1', 'Tier 2', 'Tier 3', 'Tier 4', 'Tier 5-8']
 
+tiers_of_interest = tiers
+tier_labels = ['']
+restriction_labels = ['']
+for tier in tiers:
+    tier_labels.append(tier)
+    for i in xrange(3):
+        tier_labels.append('')
+    for restriction in restrictions:
+        restrictions_labels.append(restriction) 
+
+
+
+
 def aggregate_channel_data(data, year, channel, item):
     channel_data = [channel]
     d = data[year][channel]
@@ -198,7 +216,7 @@ def write_tiered_data(filename, tiered_data, item):
         for year in years:
             csvwriter.writerow([str(year)])
             csvwriter.writerow(tier_labels)
-            csvwriter.writerow(restrictions_labels)
+            csvwriter.writerow(restriction_labels)
             for channel in channels:
                 channel_data = aggregate_channel_data(tiered_data, year, channel, item)
                 csvwriter.writerow(channel_data)
@@ -212,10 +230,7 @@ write_tiered_data('BusinessOne_All_Lives', tiered_data, 'All Lives')
 write_tiered_data('BusinessOne_Rx_Lives', tiered_data, 'Rx Lives')
 write_tiered_data('BusinessOne_Copay', tiered_data, 'Copay')
 
-
-
 csv_list = ['BusinessOne_Overall', 'BusinessOne_All_Lives', 'BusinessOne_Rx_Lives', 'BusinessOne_Copay']
-
 
 workbook = xlwt.Workbook()
 for csv_name in csv_list:
@@ -228,6 +243,61 @@ for csv_name in csv_list:
             sheet.write(i, j, value)
 
 workbook.save('BusinessOne.xls')
+
+
+
+
+
+#### CHECKING FOR MULTIPLE TIER IN SAME ENTITY/YEAR 
+
+tier_counts = defaultdict(int)
+entities_group = data.groupby(['Entity_Name', 'Period_Year', 'Channel'])
+index = pd.Series()
+
+for entity, entity_data in entities_group:
+    print entity
+    tier_count = len(entity_data['Form_Status'].unique())
+    tier_counts[tier_count] += 1
+    if tier_count > 1:
+        index = index.append(pd.Series(entity_data.index))
+
+index = pd.Series(index)
+tiers_data = data.ix[index]
+
+multiple_tiers = tiers_data.groupby(['Entity_Name', 'Period_Year', 'Channel'])
+tier_combos = defaultdict(int)
+
+for entity, entity_data in multiple_tiers:
+    tier_combo = sorted(entity_data['Form_Status'].unique())
+    tier_combos[str(tier_combo)] += 1
+
+
+
+
+
+
+
+    years_group = data.groupby(['Period_Year'])
+
+    for year, year_data in years_group:
+        print year
+        channels_group = year_data.groupby(['Channel'])
+
+        for channel, channel_data in channels_group:
+            print channel
+            tiers_group = channel_data.groupby(['Form_Status'])
+
+            for tier, tier_data in tiers_group:
+ 
+
+
+
+
+
+
+
+
+
 
 '''
 sub = data.query("Channel=='Commercial' and Form_Status=='Tier 2' and Restrict_PA=='Y'")
