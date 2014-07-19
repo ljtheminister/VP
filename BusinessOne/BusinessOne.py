@@ -19,8 +19,10 @@ for channel, channel_grp in channel_data:
     rx_lives = 0 
     entities = channel_grp.groupby(['Entity_Name', 'Period_Year'])
     for entity, entity_grp in entities:
-        all_lives += entity_grp['Total_Lives'].mean()
-        rx_lives += entity_grp['Total_Lives_Rx'].mean()
+        #all_lives += entity_grp['Total_Lives'].mean()
+        #rx_lives += entity_grp['Total_Lives_Rx'].mean()
+        all_lives += entity_grp['Total_Lives'].sum()/12.
+        rx_lives += entity_grp['Total_Lives_Rx'].sum()/12.
     all_years[channel] = (all_lives, rx_lives)
 
 # Life count by channel/year
@@ -31,8 +33,10 @@ for channel_year, group in grouped_data:
     rx_lives = 0
     entities = group.groupby(['Entity_Name'])
     for entity, entity_grp in entities:
-        all_lives += entity_grp['Total_Lives'].mean()
-        rx_lives += entity_grp['Total_Lives_Rx'].mean()
+        #all_lives += entity_grp['Total_Lives'].mean()
+        #rx_lives += entity_grp['Total_Lives_Rx'].mean()
+        all_lives += entity_grp['Total_Lives'].sum()/12.
+        rx_lives += entity_grp['Total_Lives_Rx'].sum()/12.
     yearly[channel_year] = (all_lives, rx_lives) 
     
 
@@ -42,7 +46,7 @@ for year, channel in yearly.keys():
 
 channels = ['Commercial', 'DoD', 'Managed Medicaid', 'Medicare', 'PBM Commercial', 'PBM Medicare', 'State Medicaid', 'VA']
 
-with open('BusinessOne_Overall.csv', 'wb') as f:
+with open('BusinessOne_Overall_Monthly.csv', 'wb') as f:
     csvwriter = csv.writer(f, delimiter=',')
     csvwriter.writerow(['All Years'])
     csvwriter.writerow(['', 'All Lives', 'Rx Lives'])
@@ -60,21 +64,6 @@ with open('BusinessOne_Overall.csv', 'wb') as f:
             except: 
                 all_lives, rx_lives = 0, 0
             csvwriter.writerow([channel, int(all_lives), int(rx_lives)]) 
-
-
-def compute_lives(data, tiered_data, year, channel, tier, restriction):
-    all_lives = 0
-    rx_lives = 0
-    
-    entities = data.groupby('Entity_Name')
-    for entity, entity_grp in entities:
-    
-
-
-
-
-
- 
 
 def compute_lives_copay(data, tiered_data, year, channel, tier, restriction):
     all_lives = 0
@@ -110,15 +99,6 @@ def compute_lives_copay(data, tiered_data, year, channel, tier, restriction):
     if all_plans['Copay Rx Lives']:
         all_plans['Copay'] = all_plans['Copay sum']/all_plans['Copay Rx Lives']
 
-
-'''
-    all_dict[key1][key2] = all_lives
-    rx_dict[key1][key2] = rx_lives
-    copay_dict[key1][key2] = copay
-all_
-rx_lives_tier = defaultdict(dict)
-avg_copay = defaultdict(dict)
-'''
 
 years = sorted(data['Period_Year'].unique())
 channels = sorted(data['Channel'].unique())
@@ -200,8 +180,6 @@ for tier in tiers:
         restrictions_labels.append(restriction) 
 
 
-
-
 def aggregate_channel_data(data, year, channel, item):
     channel_data = [channel]
     d = data[year][channel]
@@ -230,7 +208,7 @@ write_tiered_data('BusinessOne_All_Lives', tiered_data, 'All Lives')
 write_tiered_data('BusinessOne_Rx_Lives', tiered_data, 'Rx Lives')
 write_tiered_data('BusinessOne_Copay', tiered_data, 'Copay')
 
-csv_list = ['BusinessOne_Overall', 'BusinessOne_All_Lives', 'BusinessOne_Rx_Lives', 'BusinessOne_Copay']
+csv_list = ['BusinessOne_Overall', 'BusinessOne_Monthly', 'BusinessOne_All_Lives', 'BusinessOne_Rx_Lives', 'BusinessOne_Copay']
 
 workbook = xlwt.Workbook()
 for csv_name in csv_list:
@@ -243,10 +221,6 @@ for csv_name in csv_list:
             sheet.write(i, j, value)
 
 workbook.save('BusinessOne.xls')
-
-
-
-
 
 #### CHECKING FOR MULTIPLE TIER IN SAME ENTITY/YEAR 
 
@@ -272,42 +246,6 @@ for entity, entity_data in multiple_tiers:
     tier_combos[str(tier_combo)] += 1
 
 
-
-
-
-
-
-    years_group = data.groupby(['Period_Year'])
-
-    for year, year_data in years_group:
-        print year
-        channels_group = year_data.groupby(['Channel'])
-
-        for channel, channel_data in channels_group:
-            print channel
-            tiers_group = channel_data.groupby(['Form_Status'])
-
-            for tier, tier_data in tiers_group:
- 
-
-
-
-
-
-
-
-
-
-
-'''
-sub = data.query("Channel=='Commercial' and Form_Status=='Tier 2' and Restrict_PA=='Y'")
-group = grouped_data.get_group((2010, 'Commercial'))
-tiers = group.groupby(['Form_Status'])
-tier_data = tiers.get_group('Tier 2')
-for i, row in Non_PA[['Restrict_PA', 'Restrict_SE', 'Restrict_QL', 'Restrict_AR']].iterrows():
-    print row
-#PA_plus[['Restrict_PA', 'Restrict_SE', 'Restrict_QL', 'Restrict_AR']]
-'''
 '''
 workbook = xlwt.Workbook()
 sheet = workbook.add_sheet('BusinessOne-Overall')
